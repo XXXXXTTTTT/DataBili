@@ -20,7 +20,7 @@ docs/         研究材料、免责声明和截图说明
 - Python 3.10+
 - MySQL 8+
 
-复制 `.env.example` 为 `.env` 并填写配置。真实 `.env` 已被忽略；大模型密钥只在后端环境变量中配置。
+复制 `.env.example` 为 `.env` 并填写数据库和爬虫配置。真实 `.env` 已被忽略。
 
 ```dotenv
 DB_HOST=localhost
@@ -28,9 +28,6 @@ DB_PORT=3306
 DB_USER=root
 DB_PASSWORD=your-password
 DB_NAME=databili
-LLM_BASE_URL=https://api.deepseek.com
-LLM_MODEL=deepseek-chat
-DEEPSEEK_API_KEY=your-key
 ```
 
 可先导入 `databili_max.sql` 创建表结构。
@@ -73,7 +70,7 @@ UP 主批量采集前请确认已获授权并谨慎设置频率；凭据通过 `
 
 ## 大模型配置
 
-后端提供 `GET/PUT /api/llm-config` 管理 Base URL 和模型名，响应只包含脱敏状态，不接受 API key 写入。前端“系统设置 -> 集成设置”可修改非敏感字段；密钥必须由部署者在 `.env` 中设置。
+前端“系统设置 -> 集成设置”支持任意 OpenAI-compatible 服务。填写服务名称、Base URL、模型名和 API Key 后保存即可生效，不写入 `.env`。配置保存在当前浏览器并会在打开页面时提交给本地后端；读取接口不会返回密钥。
 
 ## 截图
 

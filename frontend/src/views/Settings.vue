@@ -108,7 +108,11 @@
         <!-- 其他设置面板... -->
         <div v-if="activeTab === 'integrations'" class="settings-panel">
           <h3>大模型设置</h3>
-          <p class="settings-hint">API 密钥仅在后端 .env 中配置，前端不会读取或保存密钥。</p>
+          <p class="settings-hint">此处配置立即作用于本地后端运行时，不会写入 .env。</p>
+          <div class="form-group">
+            <label>服务名称</label>
+            <input type="text" v-model="llmConfig.provider" placeholder="OpenAI-compatible" />
+          </div>
           <div class="form-group">
             <label>API Base URL</label>
             <input type="url" v-model="llmConfig.baseURL" placeholder="https://api.deepseek.com" />
@@ -117,8 +121,13 @@
             <label>模型名称</label>
             <input type="text" v-model="llmConfig.model" placeholder="deepseek-chat" />
           </div>
+          <div class="form-group">
+            <label>API Key</label>
+            <input type="password" v-model="llmConfig.apiKey" autocomplete="new-password" placeholder="输入所选服务的 API Key" />
+          </div>
+          <p class="settings-hint">支持任意 OpenAI-compatible 服务。配置仅保存在当前浏览器并在运行时发送给本地后端，不写入 .env。</p>
           <div class="llm-status" :class="{ configured: llmConfig.configured }">
-            {{ llmConfig.configured ? '后端密钥已配置' : '后端尚未配置大模型密钥' }}
+            {{ llmConfig.configured ? '当前模型已配置' : '请填写 API Key 后保存' }}
           </div>
         </div>
 
@@ -164,7 +173,8 @@ import {
 } from 'lucide-vue-next';
 
 const activeTab = ref('general');
-const llmConfig = ref({ baseURL: '', model: '', configured: false });
+const llmConfig = ref({ provider: '', baseURL: '', model: '', apiKey: '', configured: false });
+const llmStorageKey = 'databili.llmConfig';
 
 const settings = ref({
   systemName: 'DataBili',
@@ -186,9 +196,22 @@ const colorOptions = [
 
 const loadLlmConfig = async () => {
   try {
+    const savedConfig = localStorage.getItem(llmStorageKey);
+    if (savedConfig) {
+      const response = await fetch('/api/llm-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: savedConfig
+      });
+      const result = await response.json();
+      if (result.code === 0) {
+        llmConfig.value = { ...result.data, ...JSON.parse(savedConfig) };
+        return;
+      }
+    }
     const response = await fetch('/api/llm-config');
     const result = await response.json();
-    if (result.code === 0) llmConfig.value = result.data;
+    if (result.code === 0) llmConfig.value = { ...llmConfig.value, ...result.data };
   } catch (error) {
     console.error('读取大模型配置失败:', error);
   }
@@ -199,10 +222,24 @@ const saveSettings = async () => {
     const response = await fetch('/api/llm-config', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ baseURL: llmConfig.value.baseURL, model: llmConfig.value.model })
+      body: JSON.stringify({
+        provider: llmConfig.value.provider,
+        baseURL: llmConfig.value.baseURL,
+        model: llmConfig.value.model,
+        apiKey: llmConfig.value.apiKey
+      })
     });
     const result = await response.json();
-    if (result.code === 0) llmConfig.value = result.data;
+    if (result.code === 0) {
+      const savedConfig = {
+        provider: llmConfig.value.provider,
+        baseURL: llmConfig.value.baseURL,
+        model: llmConfig.value.model,
+        apiKey: llmConfig.value.apiKey
+      };
+      localStorage.setItem(llmStorageKey, JSON.stringify(savedConfig));
+      llmConfig.value = { ...result.data, ...savedConfig };
+    }
     return;
   }
   console.log('保存设置:', settings.value);

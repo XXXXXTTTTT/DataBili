@@ -1,5 +1,5 @@
 const express = require('express');
-const { getPublicLlmConfig, updatePublicLlmConfig } = require('../config/llm');
+const { getPublicLlmConfig, updateLlmConfig } = require('../config/llm');
 
 const router = express.Router();
 
@@ -8,12 +8,12 @@ router.get('/', (req, res) => {
 });
 
 router.put('/', (req, res) => {
-  const { baseURL, model } = req.body || {};
-  if ((baseURL !== undefined && typeof baseURL !== 'string') ||
-      (model !== undefined && typeof model !== 'string')) {
-    return res.status(400).json({ code: 1, message: 'baseURL 和 model 必须是字符串' });
+  const { provider, baseURL, model, apiKey } = req.body || {};
+  const values = { provider, baseURL, model, apiKey };
+  if (Object.values(values).some((value) => value !== undefined && typeof value !== 'string')) {
+    return res.status(400).json({ code: 1, message: '大模型配置字段必须是字符串' });
   }
-  res.json({ code: 0, data: updatePublicLlmConfig({ baseURL, model }) });
+  res.json({ code: 0, data: updateLlmConfig(values) });
 });
 
 module.exports = router;
