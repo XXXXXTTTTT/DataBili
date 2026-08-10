@@ -107,6 +107,14 @@ def load_uids_from_txt(path: str):
         uids = [int(uid.strip()) for uid in line.split(",") if uid.strip().isdigit()]
     return uids
 
+
+def get_api_error_code(exception: Exception):
+    """统一读取 bilibili-api-python 的 API code 或 HTTP status。"""
+    status = getattr(exception, "status", None)
+    if status is not None:
+        return status
+    return getattr(exception, "code", None)
+
 async def batch_crawl_from_uid_file(file_path):
     uids = load_uids_from_txt(file_path)
     print(f"📦 共读取 {len(uids)} 个 UID")
@@ -250,12 +258,16 @@ async def fetch_user_info(uid: int):
             res.update(stats)
             return res
         except ApiException as api_exc:  # 专门捕获API异常
-            if api_exc.code == -404:
+            error_code = get_api_error_code(api_exc)
+            error_message = getattr(api_exc, "msg", str(api_exc))
+            if error_code == -404:
                 print(f"[跳过] UID {uid} 不存在(404错误),跳过处理")
                 return None  # 直接返回None跳过用户
+            elif error_code in (403, 412, 429):
+                raise RuntimeError(f"UID {uid} 请求被平台拒绝（HTTP {error_code}），已停止，不执行绕过") from api_exc
             else:
-                print(f"[API错误] UID {uid} 获取失败: 代码{api_exc.code}, 信息: {api_exc.msg}")
-                raise RuntimeError(f"API 请求被拒绝或风控，code={api_exc.code}") from api_exc
+                print(f"[API错误] UID {uid} 获取失败: 代码{error_code}, 信息: {error_message}")
+                raise RuntimeError(f"API 请求失败，code={error_code}") from api_exc
         except Exception as e:
             print(f"[错误] UID {uid} 获取失败: {e}")
             raise RuntimeError("获取用户信息失败，已停止重试") from e

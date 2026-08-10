@@ -66,6 +66,27 @@ python fetch_hot.py
 
 UP 主批量采集前请确认已获授权并谨慎设置频率；凭据通过 `BILI_*` 环境变量提供，默认不登录。
 
+### UP 主数据
+
+`fetch_up.py` 接收 UID 文件并写入 `up_profile`。当前运行环境已验证该接口会被 B 站安全策略返回 HTTP 412 时优雅停止，不会重试绕过；请在获得授权、配置合规凭据后再运行。
+
+### 每小时变化量
+
+前端热门数据接口读取 `bilibili_hot_videos_server`。单轮验证：
+
+```powershell
+cd dataCrawler/real_time_people_nums
+python fetch_hot_server.py --items 5
+```
+
+持续每小时采集 500 条：
+
+```powershell
+python fetch_hot_server.py --loop --items 500 --interval 3600
+```
+
+该任务复用同一个 HTTP 会话，并在每轮完成后异步等待；遇到平台风控响应会停止对应请求，不执行绕过。
+
 稳定性验证采用低频、小样本方式：同一会话内连续执行热门列表、标签和实时人数三阶段 3 轮，并跳过数据库写入。详见 [`docs/VERIFICATION.md`](docs/VERIFICATION.md)。
 
 ## 大模型配置

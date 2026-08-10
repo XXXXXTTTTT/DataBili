@@ -70,6 +70,15 @@ UP主数据爬取过程为根据一个uid文档进行批量爬取, 每个UID对�
 
 UP主数据爬取文件为fetch_up.py
 
+`fetch_up.py` 的输入是 UID 文本文件，输出表为 `up_profile`。B 站对该接口有安全策略，收到 HTTP 412 时程序会明确停止并报告风控，不执行绕过行为。
+
+每小时变化量爬虫为 `real_time_people_nums/fetch_hot_server.py`，写入前端接口使用的 `bilibili_hot_videos_server`：
+
+```bash
+python fetch_hot_server.py --items 5
+python fetch_hot_server.py --loop --items 500 --interval 3600
+```
+
 ### 字段含义
 
 ```
@@ -88,4 +97,3 @@ total_duration : 0,  # 总视频时长（秒）
 total_chargers : 0,  # 总充电人数
 total_videos_count : 0,  # 总分P数
 ```
-
