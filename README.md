@@ -69,6 +69,8 @@ python fetch_hot.py
 
 UP 主批量采集前请确认已获授权并谨慎设置频率；凭据通过 `BILI_*` 环境变量提供，默认不登录。
 
+稳定性验证采用低频、小样本方式：同一会话内连续执行热门列表、标签和实时人数三阶段 3 轮，并跳过数据库写入。详见 [`docs/VERIFICATION.md`](docs/VERIFICATION.md)。
+
 ## 大模型配置
 
 后端提供 `GET/PUT /api/llm-config` 管理 Base URL 和模型名，响应只包含脱敏状态，不接受 API key 写入。前端“系统设置 -> 集成设置”可修改非敏感字段；密钥必须由部署者在 `.env` 中设置。

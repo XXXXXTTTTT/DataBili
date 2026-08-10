@@ -50,7 +50,11 @@ async def fetch_page(session: aiohttp.ClientSession, page: int, ps: int = 50, re
     logger.error(f"Page {page} failed after {retries} attempts")
     return []
 
-async def fetch_all_pages(total_items: int = 500, ps: int = 50) -> List[Dict]:
+async def fetch_all_pages(
+    total_items: int = 500,
+    ps: int = 50,
+    session: aiohttp.ClientSession | None = None,
+) -> List[Dict]:
     """
     获取所有页数据，控制并发速率
     """
@@ -58,18 +62,23 @@ async def fetch_all_pages(total_items: int = 500, ps: int = 50) -> List[Dict]:
     semaphore = asyncio.Semaphore(MAX_CONCURRENT)  # 限制最大并发数
     results = []
 
-    async def fetch_with_semaphore(page: int) -> List[Dict]:
+    async def fetch_with_semaphore(page: int, active_session: aiohttp.ClientSession) -> List[Dict]:
         async with semaphore:
-            async with aiohttp.ClientSession() as session:
-                data = await fetch_page(session, page, ps)
-                await asyncio.sleep(REQUEST_INTERVAL)  # 控制请求速率
-                return data
+            data = await fetch_page(active_session, page, ps)
+            await asyncio.sleep(REQUEST_INTERVAL)  # 控制请求速率
+            return data
 
-    tasks = [fetch_with_semaphore(page) for page in range(1, total_pages + 1)]
-    for future in asyncio.as_completed(tasks):
-        page_data = await future
-        results.extend(page_data)
-        logger.info(f"Fetched {len(page_data)} items from page, total: {len(results)}")
+    owns_session = session is None
+    active_session = session or aiohttp.ClientSession()
+    try:
+        tasks = [fetch_with_semaphore(page, active_session) for page in range(1, total_pages + 1)]
+        for future in asyncio.as_completed(tasks):
+            page_data = await future
+            results.extend(page_data)
+            logger.info(f"Fetched {len(page_data)} items from page, total: {len(results)}")
+    finally:
+        if owns_session:
+            await active_session.close()
 
     return results[:total_items]  # 确保不超过指定数量
 
@@ -97,21 +106,26 @@ async def fetch_tags(session: aiohttp.ClientSession, aid: str, retries: int = RE
     logger.error(f"Tag fetch for aid {aid} failed after {retries} attempts")
     return []
 
-async def add_tags(videos_list: List[Dict]):
+async def add_tags(videos_list: List[Dict], session: aiohttp.ClientSession | None = None):
 
     semaphore = asyncio.Semaphore(MAX_CONCURRENT)  # 限制最大并发数
 
-    async def fetch_tags_for_video(i: int, d: Dict):
+    async def fetch_tags_for_video(i: int, d: Dict, active_session: aiohttp.ClientSession):
         async with semaphore:
-            async with aiohttp.ClientSession() as session:
-                aid = str(d["aid"])  # 确保aid是字符串
-                tag_names = await fetch_tags(session, aid)
-                d["tags"] = tag_names
-                logger.info(f"{i+1}-->successful")
-                await asyncio.sleep(REQUEST_INTERVAL)  # 控制请求速率
+            aid = str(d["aid"])  # 确保aid是字符串
+            tag_names = await fetch_tags(active_session, aid)
+            d["tags"] = tag_names
+            logger.info(f"{i+1}-->successful")
+            await asyncio.sleep(REQUEST_INTERVAL)  # 控制请求速率
 
-    tasks = [fetch_tags_for_video(i, d) for i, d in enumerate(videos_list)]
-    await asyncio.gather(*tasks)
+    owns_session = session is None
+    active_session = session or aiohttp.ClientSession()
+    try:
+        tasks = [fetch_tags_for_video(i, d, active_session) for i, d in enumerate(videos_list)]
+        await asyncio.gather(*tasks)
+    finally:
+        if owns_session:
+            await active_session.close()
     
     
 async def fetch_online_count(session: aiohttp.ClientSession, bvid: str, cid: str, retries: int = RETRY_ATTEMPTS) -> Dict[str, str]:
@@ -144,31 +158,36 @@ async def fetch_online_count(session: aiohttp.ClientSession, bvid: str, cid: str
     return {"real_time_all": "0", "real_time_web": "0"}
 
 
-async def add_real_time_people(videos_list: List[Dict]):
+async def add_real_time_people(videos_list: List[Dict], session: aiohttp.ClientSession | None = None):
     """
     为视频列表添加实时在线人数信息
     """
     semaphore = asyncio.Semaphore(MAX_CONCURRENT)  # 限制最大并发数
 
-    async def fetch_online_for_video(i: int, d: Dict):
+    async def fetch_online_for_video(i: int, d: Dict, active_session: aiohttp.ClientSession):
         async with semaphore:
-            async with aiohttp.ClientSession() as session:
-                bvid = d.get("bvid", "")
-                cid = d.get("cid", "")
-                
-                if not bvid or not cid:
-                    logger.warning(f"Missing bvid or cid for video {i+1}")
-                    d["real_time_all"] = "0"
-                    d["real_time_web"] = "0"
-                    return
-                
-                online_data = await fetch_online_count(session, bvid, str(cid))
-                d.update(online_data)
-                logger.info(f"Online count {i+1}-->successful")
-                await asyncio.sleep(REQUEST_INTERVAL)  # 控制请求速率
+            bvid = d.get("bvid", "")
+            cid = d.get("cid", "")
 
-    tasks = [fetch_online_for_video(i, d) for i, d in enumerate(videos_list)]
-    await asyncio.gather(*tasks)
+            if not bvid or not cid:
+                logger.warning(f"Missing bvid or cid for video {i+1}")
+                d["real_time_all"] = "0"
+                d["real_time_web"] = "0"
+                return
+
+            online_data = await fetch_online_count(active_session, bvid, str(cid))
+            d.update(online_data)
+            logger.info(f"Online count {i+1}-->successful")
+            await asyncio.sleep(REQUEST_INTERVAL)  # 控制请求速率
+
+    owns_session = session is None
+    active_session = session or aiohttp.ClientSession()
+    try:
+        tasks = [fetch_online_for_video(i, d, active_session) for i, d in enumerate(videos_list)]
+        await asyncio.gather(*tasks)
+    finally:
+        if owns_session:
+            await active_session.close()
     
 def process_json_data(data: List[Dict]) -> List[Dict]:
     keys_to_extract = [
@@ -218,9 +237,10 @@ async def record():
     hot_videos_dict["timestamp"] = timestamp
     hot_videos_dict["formatted_time"] = formatted_time
     
-    videos_list = await fetch_all_pages(total_items=500, ps=50)
-    await add_tags(videos_list)
-    await add_real_time_people(videos_list)  # 添加这一行
+    async with aiohttp.ClientSession() as session:
+        videos_list = await fetch_all_pages(total_items=500, ps=50, session=session)
+        await add_tags(videos_list, session=session)
+        await add_real_time_people(videos_list, session=session)
     videos_list = process_data(videos_list)
     
     hot_videos_dict["data"] = videos_list
