@@ -8,6 +8,7 @@ import tqdm
 import os
 from pathlib import Path
 from config import credential_values, database_config
+from up_state import classify_exception, is_retry_allowed, record_crawl_state
 
 
 # ============ 全局配置 ==============
@@ -94,6 +95,26 @@ def insert_into_mysql(data: dict):
     cursor.close()
     connection.close()
 
+
+def insert_partial_profile(data: dict):
+    """仅更新已确认的基础资料，避免将缺失统计写成零。"""
+    connection = pymysql.connect(**db_config)
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO up_profile (uid, name, avatar_url, followers)
+                VALUES (%s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    name = VALUES(name), avatar_url = VALUES(avatar_url),
+                    followers = VALUES(followers)
+                """,
+                (data["uid"], data.get("name", ""), data.get("avatar_url", ""), data.get("followers")),
+            )
+        connection.commit()
+    finally:
+        connection.close()
+
 # 生成随机 UID
 #8263502
 def generate_random_uid():
@@ -122,12 +143,19 @@ async def batch_crawl_from_uid_file(file_path):
     for idx, uid in enumerate(uids):
         print(f"\n[{idx+1}/{len(uids)}] 处理 UID: {uid}")
 
+        if not is_retry_allowed(uid):
+            print(f"[冷却] UID {uid} 尚未到允许重试时间，跳过")
+            continue
+
         while True:  # 重试循环
             try:
                 data = await fetch_user_info(uid)
                 if data:
                     print(f"✅ 成功抓取 UID: {uid}，粉丝数: {data['followers']}")
-                    insert_into_mysql(data)
+                    if data.get("_status") == "partial":
+                        insert_partial_profile(data)
+                    else:
+                        insert_into_mysql(data)
                 else:
                     print(f"⚠️ 跳过 UID: {uid}(无效、粉丝少、视频过多或无视频)")
                 break
@@ -250,12 +278,22 @@ async def fetch_user_info(uid: int):
             res["name"] = info.get("name", "")
             res["avatar_url"] = info.get("face", "")
 
-            bvids = await fetch_all_videos(u)
+            try:
+                bvids = await fetch_all_videos(u)
+            except Exception as exc:
+                status, error_code = classify_exception(exc)
+                if status == "risk_blocked":
+                    record_crawl_state(uid, status, "bilibili_api", error_code, str(exc))
+                    res["_status"] = "partial"
+                    print(f"[风控] UID {uid} 视频列表被拒绝（HTTP {error_code}），保留基础资料")
+                    return res
+                raise
             if not bvids:
+                record_crawl_state(uid, "partial", "bilibili_api", None, "视频列表为空")
                 return None
-
             stats = await get_video_stats_concurrent(bvids)
             res.update(stats)
+            record_crawl_state(uid, "success", "bilibili_api")
             return res
         except ApiException as api_exc:  # 专门捕获API异常
             error_code = get_api_error_code(api_exc)
@@ -264,11 +302,15 @@ async def fetch_user_info(uid: int):
                 print(f"[跳过] UID {uid} 不存在(404错误),跳过处理")
                 return None  # 直接返回None跳过用户
             elif error_code in (403, 412, 429):
+                record_crawl_state(uid, "risk_blocked", "bilibili_api", error_code, error_message)
                 raise RuntimeError(f"UID {uid} 请求被平台拒绝（HTTP {error_code}），已停止，不执行绕过") from api_exc
             else:
+                record_crawl_state(uid, "provider_error", "bilibili_api", error_code, error_message)
                 print(f"[API错误] UID {uid} 获取失败: 代码{error_code}, 信息: {error_message}")
                 raise RuntimeError(f"API 请求失败，code={error_code}") from api_exc
         except Exception as e:
+            status, error_code = classify_exception(e)
+            record_crawl_state(uid, status, "bilibili_api", error_code, str(e))
             print(f"[错误] UID {uid} 获取失败: {e}")
             raise RuntimeError("获取用户信息失败，已停止重试") from e
 

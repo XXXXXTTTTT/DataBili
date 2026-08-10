@@ -85,6 +85,26 @@ dataCrawler/test_fetch_up_errors.py: passed
 
 `fetch_up.py` 导入了 `tqdm`，但 `dataCrawler/requirements.txt` 原先没有该依赖。已补充 `tqdm==4.70.0`。
 
+### 3.6 可恢复状态与降级写入：已验证
+
+新增 `dataCrawler/up_state.py`，在 MySQL 中自动创建 `up_crawl_state`：
+
+| 字段 | 用途 |
+| --- | --- |
+| `uid` | UP 主 UID，主键 |
+| `status` | 本次采集状态 |
+| `source` | 数据来源标识 |
+| `error_code`、`last_error` | 平台或供应商错误信息 |
+| `attempts` | 已记录的尝试次数 |
+| `fetched_at`、`next_retry_at` | 成功/部分成功时间与下次允许尝试时间 |
+| `updated_at` | 状态最近更新时间 |
+
+2026-08-10 再次实际请求 UID `373388923`：基础资料与粉丝数成功，视频列表继续返回 HTTP 412。程序写入了 `up_crawl_state` 记录：`status=risk_blocked`、`error_code=412`、`next_retry_at` 为记录后 6 小时。
+
+同时，程序只更新 `up_profile` 的 `uid`、昵称、头像和粉丝数；`total_videos`、`total_view` 等视频统计保持 `NULL`，没有以零值伪装成完整数据。异常分类由 `dataCrawler/test_up_state.py` 与 `dataCrawler/test_fetch_up_errors.py` 回归验证，数据库写入由本节所述真实请求验证。
+
+UID 批处理在请求前检查 `next_retry_at`；冷却未结束会跳过该 UID，不再次请求平台。`403` 与 `412` 的冷却期为 6 小时，`429` 的冷却期为 1 小时。
+
 ## 4. 可持续的合规方案
 
 ### 4.1 已授权的官方访问
@@ -118,7 +138,7 @@ BILI_BILI_JCT=...
 
 当投稿列表返回 412 时：
 
-1. 保存可获得的 UID、昵称、头像、粉丝数和采集时间。
+1. 保存可获得的 UID、昵称、头像、粉丝数和采集时间；视频统计字段保持缺失值。
 2. 把视频列表状态标记为 `risk_blocked`，不伪造为“无视频”。
 3. 使用已经由热门视频爬虫获得的 `owner_mid`、视频标题和视频统计作为有限补充。
 4. 在明确的冷却期后，只有在授权配置变更或运营者人工确认后才再次尝试。
