@@ -81,6 +81,8 @@ UP 主批量采集前请确认已获授权并谨慎设置频率；凭据通过 `
 
 本项目采用 [MIT License](LICENSE)。使用者需自行确认数据来源、访问频率、模型服务条款和输出内容的合法性；详见 [`docs/DISCLAIMER.md`](docs/DISCLAIMER.md)。
 
+发布前验证记录见 [`docs/VERIFICATION.md`](docs/VERIFICATION.md)。
+
 ## 贡献
 
 欢迎提交 Issue 和 Pull Request。请不要提交 `.env`、Cookie、API 密钥、个人数据或未经授权的抓取结果。
