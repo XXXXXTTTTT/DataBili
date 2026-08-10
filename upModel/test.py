@@ -1,4 +1,5 @@
 import joblib
+from config import DB_CONFIG
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -59,11 +60,7 @@ def predict_new_data(uid, new_data, model_path='kmeans_model.pkl', scaler_path='
     # 插入到数据库
     try:
         conn = pymysql.connect(
-            host='114.116.251.42',
-            user='remote',
-            password='123456',
-            database='bilibili',
-            port= 3306,
+            **DB_CONFIG,
             charset='utf8mb4'
         )
         

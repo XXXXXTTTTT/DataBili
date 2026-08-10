@@ -1,6 +1,11 @@
 import pymysql
+import sys
+from pathlib import Path
 
-def insert_bilibili_data(data, host='localhost', port=3306, user='root', password='123456', database='bilibili'):
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from config import database_config
+
+def insert_bilibili_data(data, host=None, port=None, user=None, password=None, database=None):
     """
     插入B站视频数据到数据库
     
@@ -14,12 +19,13 @@ def insert_bilibili_data(data, host='localhost', port=3306, user='root', passwor
     connection = None
     try:
         # 连接数据库
+        config = database_config()
         connection = pymysql.connect(
-            host=host,
-            port=port,
-            user=user,
-            password=password,
-            database=database,
+            host=host or config["host"],
+            port=port or config["port"],
+            user=user or config["user"],
+            password=password if password is not None else config["password"],
+            database=database or config["database"],
             charset='utf8mb4',
             cursorclass=pymysql.cursors.DictCursor
         )

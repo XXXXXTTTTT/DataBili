@@ -1,6 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const OpenAI = require('openai');
+const { getLlmConfig } = require('../config/llm');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const router = express.Router();
 
@@ -17,13 +18,13 @@ let fetch;
 // 基本配置
 const comment_url = "https://api.aicu.cc/api/v3/search/getreply?uid={uid}&pn={pn}&ps=100&mode=0&keyword=";
 const user_info_url = "https://api.bilibili.com/x/web-interface/card?mid=";
-const api_key = "sk-7f156bbe6cff4fdfa6a6cd59457e6b1e";
-
-// 初始化 OpenAI 客户端
-const openai = new OpenAI({
-    baseURL: 'https://api.deepseek.com',
-    apiKey: api_key
-});
+function createLlmClient() {
+    const config = getLlmConfig();
+    if (!config.apiKey) {
+        return null;
+    }
+    return new OpenAI({ baseURL: config.baseURL, apiKey: config.apiKey });
+}
 
 //词频统计
 // 停用词列表
@@ -256,12 +257,16 @@ ${JSON.stringify({ re_array }, null, 2)}
 }`;
 
     try {
+        const openai = createLlmClient();
+        if (!openai) {
+            throw new Error('未配置 DEEPSEEK_API_KEY');
+        }
         const completion = await openai.chat.completions.create({
             messages: [
                 { role: "system", content: "You are a professional data analyst. Return only valid JSON format." },
                 { role: "user", content: prompt }
             ],
-            model: "deepseek-chat",
+            model: getLlmConfig().model,
             temperature: 0.7,
             type: 'json_object'
         });

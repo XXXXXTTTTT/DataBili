@@ -1,0 +1,32 @@
+# 依赖与构建产物
+node_modules/
+**/node_modules/
+dist/
+coverage/
+
+# Python 缓存与虚拟环境
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 本地配置与密钥
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# 本地数据、日志和模型临时文件
+*.log
+*.tmp
+*.sqlite3
+dataCrawler/*.json
+dataCrawler/real_time_people_nums/*.json
+
+# 编辑器与系统文件
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

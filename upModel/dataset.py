@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 import warnings
+from config import DB_CONFIG
 
 
 #忽略所有警告
@@ -11,23 +12,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 # 数据库连接配置
 
 #本地
-db_config = {
-    "host": "localhost",         # 数据库地址，云服务器的 MySQL
-    "user": "root",              # 数据库用户名
-    "password": "123456",        # 数据库密码
-    "database": "man",           # 数据库名
-    "port": 3306                 # 默认 MySQL 端口
-}
-
-
-#远端
-# db_config = {
-#     "host": "114.116.251.42",         # 数据库地址，云服务器的 MySQL
-#     "user": "remote",              # 数据库用户名
-#     "password": "123456",        # 数据库密码
-#     "database": "bilibili",      # 数据库名
-#     "port": 3306                 # 默认 MySQL 端口
-# }
+db_config = DB_CONFIG
 
 
 # 数值型特征，去掉 `name` 和 `avatar_url` 等非数值列

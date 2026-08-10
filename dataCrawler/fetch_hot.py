@@ -5,6 +5,8 @@ from typing import List, Dict
 import logging
 import time
 import writetosql
+from pathlib import Path
+import os
 
 # 设置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -30,12 +32,15 @@ async def fetch_page(session: aiohttp.ClientSession, page: int, ps: int = 50, re
     for attempt in range(retries):
         try:
             async with session.get(BASE_URL, params=params, timeout=TIMEOUT, headers=headers) as response:
+                if response.status in (403, 412, 429):
+                    logger.error(f"Page {page} 被平台拒绝（HTTP {response.status}），停止重试")
+                    return []
                 if response.status == 200:
                     data = await response.json()
                     if data.get('code') == 0 and data.get('data', {}).get('list'):
                         return data['data']['list']
                     else:
-                        logger.error(f"Page {page} failed with code {data.get('code')}")
+                        logger.error(f"Page {page} failed with code {data.get('code')}，停止该页请求")
                         return []
                 else:
                     logger.warning(f"Page {page} attempt {attempt + 1} failed with status {response.status}")
@@ -220,10 +225,14 @@ async def record():
     
     hot_videos_dict["data"] = videos_list
     
-    with open('bilibili_popular.json', 'w', encoding='utf-8') as f:
+    output_path = Path(__file__).resolve().parents[1] / 'bilibili_popular.json'
+    with output_path.open('w', encoding='utf-8') as f:
         json.dump(hot_videos_dict, f, ensure_ascii=False, indent=2)
     logger.info(f"Successfully fetched {len(videos_list)} videos")
     
+    if os.getenv("CRAWLER_SKIP_DB", "false").lower() == "true":
+        logger.info("CRAWLER_SKIP_DB=true，跳过数据库写入")
+        return
     success = writetosql.insert_bilibili_data(data=hot_videos_dict)
     if success:
         print("=======success to insert into database=======")
@@ -234,7 +243,7 @@ async def record():
 async def main(loop:bool=False,interval:int=1800):
     await record()
     while loop:
-        time.sleep(interval)
+        await asyncio.sleep(interval)
         await record()
         
 if __name__ == "__main__":

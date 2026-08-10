@@ -106,6 +106,22 @@
         </div>
 
         <!-- 其他设置面板... -->
+        <div v-if="activeTab === 'integrations'" class="settings-panel">
+          <h3>大模型设置</h3>
+          <p class="settings-hint">API 密钥仅在后端 .env 中配置，前端不会读取或保存密钥。</p>
+          <div class="form-group">
+            <label>API Base URL</label>
+            <input type="url" v-model="llmConfig.baseURL" placeholder="https://api.deepseek.com" />
+          </div>
+          <div class="form-group">
+            <label>模型名称</label>
+            <input type="text" v-model="llmConfig.model" placeholder="deepseek-chat" />
+          </div>
+          <div class="llm-status" :class="{ configured: llmConfig.configured }">
+            {{ llmConfig.configured ? '后端密钥已配置' : '后端尚未配置大模型密钥' }}
+          </div>
+        </div>
+
         <div v-if="activeTab === 'notifications'" class="settings-panel">
           <h3>通知设置</h3>
           <div class="form-group">
@@ -148,6 +164,7 @@ import {
 } from 'lucide-vue-next';
 
 const activeTab = ref('general');
+const llmConfig = ref({ baseURL: '', model: '', configured: false });
 
 const settings = ref({
   systemName: 'DataBili',
@@ -167,13 +184,39 @@ const colorOptions = [
   { value: 'orange', color: '#F59E0B' }
 ];
 
-const saveSettings = () => {
+const loadLlmConfig = async () => {
+  try {
+    const response = await fetch('/api/llm-config');
+    const result = await response.json();
+    if (result.code === 0) llmConfig.value = result.data;
+  } catch (error) {
+    console.error('读取大模型配置失败:', error);
+  }
+};
+
+const saveSettings = async () => {
+  if (activeTab.value === 'integrations') {
+    const response = await fetch('/api/llm-config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseURL: llmConfig.value.baseURL, model: llmConfig.value.model })
+    });
+    const result = await response.json();
+    if (result.code === 0) llmConfig.value = result.data;
+    return;
+  }
   console.log('保存设置:', settings.value);
 };
 
 const resetSettings = () => {
+  if (activeTab.value === 'integrations') {
+    loadLlmConfig();
+    return;
+  }
   console.log('重置设置');
 };
+
+loadLlmConfig();
 </script>
 
 <style scoped>
@@ -275,6 +318,21 @@ const resetSettings = () => {
   border-radius: var(--radius);
   background-color: var(--background);
   color: var(--foreground);
+}
+
+.settings-hint {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  margin-bottom: 1.5rem;
+}
+
+.llm-status {
+  color: #b45309;
+  font-size: 0.875rem;
+}
+
+.llm-status.configured {
+  color: #047857;
 }
 
 .radio-group {

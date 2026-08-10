@@ -5,6 +5,9 @@ import pymysql
 from bilibili_api import user, video, Credential, request_settings
 from bilibili_api.exceptions import ApiException
 import tqdm
+import os
+from pathlib import Path
+from config import credential_values, database_config
 
 
 # ============ 全局配置 ==============
@@ -16,11 +19,7 @@ RETRY_ATTEMPTS = 5         # 每个请求最大重试次数
 FORCE_SLEEP_EVERY = 5     # 每处理多少个UID就强制长休息
 FORCE_SLEEP_DURATION = 60  # 强制休息的时间（秒）
 MIN_FOLLOWERS = 2000       # 最小粉丝数过滤阈值
-USE_CREDENTIAL = False     # 是否启用账号登录
-
-# 自己的 Cookie 值
-SESSDATA = "bbf6d486%2C1764679409%2Cc5b19%2A61CjD7JL8rnzFkVGHJG40ZuOzaG7WGCqWmnRLIbVoUEOzr9FbUG1qYOvdCV6fIymtkvoASVjl1bTdMRG02WXEydmhxV1RkN2hxbG5OejdYQ2dMaWpkWllLNjI2V0wzZ1ZLYkNsaGpIYXZsRlpkSEE3RTN4Y2hJcU5CMi0yT0N3b1hpR3BuZ0dXeFRBIIEC"
-BILI_JCT = "11d4bdd0e2cf2e4c6b97efb55dccd8c5"
+USE_CREDENTIAL, SESSDATA, BILI_JCT = credential_values()
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
@@ -36,27 +35,14 @@ HEADERS = {
 
 
 #登入
+if USE_CREDENTIAL and (not SESSDATA or not BILI_JCT):
+    raise RuntimeError("BILI_USE_CREDENTIAL=true 时必须同时配置 BILI_SESSDATA 和 BILI_BILI_JCT")
 credential = Credential(sessdata=SESSDATA, bili_jct=BILI_JCT) if USE_CREDENTIAL else None
 
 # 数据库配置
 
 #远端
-db_config = {
-    "host": "114.116.251.42",
-    "user": "remote",
-    "password": "123456",
-    "database": "bilibili",
-    "port": 3306
-}
-
-#本地
-# db_config = {
-#     "host": "localhost",
-#     "user": "root",
-#     "password": "123456",
-#     "database": "man",
-#     "port": 3306
-# }
+db_config = database_config()
 
 # 数据库插入函数
 def insert_into_mysql(data: dict):
@@ -139,6 +125,7 @@ async def batch_crawl_from_uid_file(file_path):
                 break
             except Exception as e:
                 print(f"❌ UID失败: {uid} 失败，错误: {e}")
+                break
 
                 
 
@@ -268,13 +255,13 @@ async def fetch_user_info(uid: int):
                 return None  # 直接返回None跳过用户
             else:
                 print(f"[API错误] UID {uid} 获取失败: 代码{api_exc.code}, 信息: {api_exc.msg}")
-                await asyncio.sleep(600)  # 其他API错误仍然重试
+                raise RuntimeError(f"API 请求被拒绝或风控，code={api_exc.code}") from api_exc
         except Exception as e:
             print(f"[错误] UID {uid} 获取失败: {e}")
-            await asyncio.sleep(600)
+            raise RuntimeError("获取用户信息失败，已停止重试") from e
 
 
 
 if __name__ == '__main__':
-    asyncio.run(batch_crawl_from_uid_file("upUid2.txt"))
+    asyncio.run(batch_crawl_from_uid_file(str(Path(__file__).resolve().parent / "upUid2.txt")))
     # asyncio.run(random_crawler_loop())
