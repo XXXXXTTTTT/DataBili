@@ -77,6 +77,55 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/up-profile/known-videos?uid=123456
+router.get('/known-videos', async (req, res) => {
+  const { uid } = req.query;
+  if (!uid) {
+    return res.status(400).json({ code: 1, message: '缺少参数uid' });
+  }
+
+  try {
+    const [rows] = await pool.query(`
+      SELECT
+        video.aid,
+        video.title,
+        video.pic,
+        video.pubdate,
+        video.tname,
+        video.duration,
+        video.stat_view,
+        video.stat_like,
+        video.stat_coin,
+        video.stat_favorite,
+        video.stat_reply,
+        video.stat_danmaku,
+        video.timestamp AS observed_at
+      FROM bilibili_hot_videos_server AS video
+      INNER JOIN (
+        SELECT aid, MAX(timestamp) AS latest_timestamp
+        FROM bilibili_hot_videos_server
+        WHERE owner_mid = ?
+        GROUP BY aid
+      ) AS latest
+        ON video.aid = latest.aid
+        AND video.timestamp = latest.latest_timestamp
+      WHERE video.owner_mid = ?
+      ORDER BY video.timestamp DESC
+      LIMIT 100
+    `, [uid, uid]);
+
+    res.json({
+      code: 0,
+      source: 'bilibili_hot_videos_server',
+      completeness: 'observed_hot_videos_only',
+      data: rows
+    });
+  } catch (error) {
+    console.error('已观测 UP 主视频查询失败:', error);
+    res.status(500).json({ code: 1, message: '服务器内部错误' });
+  }
+});
+
 //GetUP主聚类分析API
 router.get('/analysis', async (req, res) => {
   try {
@@ -130,4 +179,4 @@ router.get('/summary', async (req, res) => {
   }
 });
 
-module.exports = router; 
+module.exports = router;

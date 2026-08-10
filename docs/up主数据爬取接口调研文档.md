@@ -143,6 +143,25 @@ BILI_BILI_JCT=...
 3. 使用已经由热门视频爬虫获得的 `owner_mid`、视频标题和视频统计作为有限补充。
 4. 在明确的冷却期后，只有在授权配置变更或运营者人工确认后才再次尝试。
 
+### 4.5 项目已观测热门视频补充
+
+新增后端接口：
+
+```text
+GET /api/up-profile/known-videos?uid=<UID>
+```
+
+该接口只读取本项目每小时采集的 `bilibili_hot_videos_server`，按 `aid` 返回最新一次观察到的视频快照。响应固定包含：
+
+```json
+{
+  "source": "bilibili_hot_videos_server",
+  "completeness": "observed_hot_videos_only"
+}
+```
+
+`completeness` 明确表示结果只是曾进入项目热门数据集的视频，不是该 UP 主的完整投稿列表。该路径不向 B 站发起 UP 主投稿列表请求，适合作为 HTTP 412 风控期间的展示补充。
+
 ## 5. 推荐的系统设计
 
 ```text
